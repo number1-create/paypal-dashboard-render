@@ -2,6 +2,7 @@
 import os
 import requests
 from functools import wraps
+from waitress import serve
 from flask import Flask, request, jsonify, render_template, Response
 
 app = Flask(__name__, template_folder='templates')
@@ -100,3 +101,10 @@ def create_payout():
         return jsonify(response.json())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    # Render ci dice su quale porta ascoltare tramite una variabile d'ambiente.
+    # Usiamo 10000 come default se non la trova.
+    port = int(os.environ.get("PORT", 10000))
+    # Usiamo Waitress per servire l'app. '0.0.0.0' è necessario per Render.
+    serve(app, host='0.0.0.0', port=port)
