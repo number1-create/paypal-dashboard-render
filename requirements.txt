@@ -1,3 +1,4 @@
+# File: requirements.txt
 Flask
 requests
-gunicorn
+waitress  # Abbiamo sostituito gunicorn con waitress
