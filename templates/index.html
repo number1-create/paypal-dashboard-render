@@ -1,0 +1,111 @@
+<!-- File: templates/index.html -->
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PayPal Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    <style>
+        body { padding: 2rem; }
+        pre { background-color: #f0f0f0; padding: 1rem; border-radius: 5px; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;}
+        h2 { margin-top: 2rem; }
+        button[aria-busy=true] { margin-left: 1rem;}
+    </style>
+</head>
+<body>
+    <main class="container">
+        <h1>Dashboard PayPal Semplice</h1>
+
+        <article>
+            <header><h2>Cerca Transazioni</h2></header>
+            <form id="search-form">
+                <div class="grid">
+                    <label>Data Inizio <input type="text" id="start_date" placeholder="2025-08-20T00:00:00Z" required></label>
+                    <label>Data Fine <input type="text" id="end_date" placeholder="2025-08-21T23:59:59Z" required></label>
+                </div>
+                <button id="search-btn" type="submit">Cerca</button>
+            </form>
+        </article>
+
+        <article>
+            <header><h2>Invia Pagamenti Massivi (Payouts)</h2></header>
+            <form id="payout-form">
+                <label>Dati (email,importo per riga)</label>
+                <textarea id="payout_data" rows="5" placeholder="esempio@email.com,15.50&#10;altro@utente.it,20.00" required></textarea>
+                <button id="payout-btn" type="submit">Invia Pagamenti</button>
+            </form>
+        </article>
+
+        <section>
+            <h2>Risultati</h2>
+            <pre id="results">I risultati delle operazioni appariranno qui...</pre>
+        </section>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchForm = document.getElementById('search-form');
+            const payoutForm = document.getElementById('payout-form');
+            const resultsArea = document.getElementById('results');
+            const searchBtn = document.getElementById('search-btn');
+            const payoutBtn = document.getElementById('payout-btn');
+
+            const setLoading = (button, isLoading) => {
+                button.disabled = isLoading;
+                button.setAttribute('aria-busy', isLoading);
+            };
+
+            searchForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                setLoading(searchBtn, true);
+                resultsArea.textContent = 'Ricerca in corso...';
+                
+                try {
+                    const response = await fetch('/api/search', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            start_date: document.getElementById('start_date').value,
+                            end_date: document.getElementById('end_date').value,
+                        })
+                    });
+                    const data = await response.json();
+                    resultsArea.textContent = JSON.stringify(data, null, 2);
+                } catch (error) {
+                    resultsArea.textContent = `Errore: ${error}`;
+                } finally {
+                    setLoading(searchBtn, false);
+                }
+            });
+
+            payoutForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!confirm('Sei sicuro di voler inviare questi pagamenti?')) return;
+                setLoading(payoutBtn, true);
+                resultsArea.textContent = 'Invio pagamenti in corso...';
+
+                try {
+                    const lines = document.getElementById('payout_data').value.trim().split('\n');
+                    const items = lines.map(line => {
+                        const [email, value] = line.split(',');
+                        return { email: email.trim(), value: value.trim() };
+                    });
+
+                    const response = await fetch('/api/payout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(items)
+                    });
+                    const data = await response.json();
+                    resultsArea.textContent = JSON.stringify(data, null, 2);
+                } catch (error) {
+                    resultsArea.textContent = `Errore: ${error}`;
+                } finally {
+                    setLoading(payoutBtn, false);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
