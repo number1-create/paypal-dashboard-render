@@ -1,24 +1,116 @@
-<!-- File: templates/index.html -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PayPal Dashboard</title>
+    <title>PayPal Batch Payments</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
     <style>
         body { padding: 2rem; }
-        pre { background-color: #f0f0f0; padding: 1rem; border-radius: 5px; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;}
+        pre {
+            background-color: #f0f0f0;
+            padding: 1rem;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 400px;
+            overflow-y: auto;
+        }
         h2 { margin-top: 2rem; }
-        button[aria-busy=true] { margin-left: 1rem;}
+        .summary-bar {
+            display: flex;
+            gap: 2rem;
+            padding: 0.75rem 1rem;
+            background: #e8f5e9;
+            border-radius: 5px;
+            margin: 0.5rem 0;
+            font-weight: bold;
+        }
+        .summary-bar.has-errors { background: #ffebee; }
+        .preview-table {
+            width: 100%;
+            margin: 0.5rem 0;
+            max-height: 300px;
+            overflow-y: auto;
+            display: block;
+        }
+        .preview-table table { width: 100%; margin: 0; }
+        .preview-table th { position: sticky; top: 0; background: #fff; }
+        .error-row { color: #c62828; font-style: italic; }
+        .duplicate-row { color: #e65100; }
+        .btn-group { display: flex; gap: 0.5rem; align-items: center; }
+        .btn-group button { margin: 0; }
+        .btn-secondary {
+            background: #607d8b;
+            border-color: #607d8b;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 3px;
+            font-size: 0.85rem;
+            font-weight: bold;
+        }
+        .status-SUCCESS { background: #c8e6c9; color: #2e7d32; }
+        .status-PENDING { background: #fff9c4; color: #f57f17; }
+        .status-PROCESSING { background: #bbdefb; color: #1565c0; }
+        .status-DENIED, .status-FAILED { background: #ffcdd2; color: #c62828; }
+        #payout-section textarea {
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        .help-text {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: -0.5rem;
+            margin-bottom: 0.5rem;
+        }
     </style>
 </head>
 <body>
     <main class="container">
-        <h1>Dashboard PayPal Semplice</h1>
+        <h1>PayPal Batch Payments</h1>
 
-        <article>
-            <header><h2>Cerca Transazioni</h2></header>
+        <!-- SEZIONE PAGAMENTI -->
+        <article id="payout-section">
+            <header><h2>Invia Pagamenti Massivi</h2></header>
+            <form id="payout-form">
+                <label>Incolla le email e gli importi (una per riga: email,importo)</label>
+                <p class="help-text">
+                    Formato: <code>email@esempio.com,15.50</code> &mdash; una per riga. Max 500 destinatari.
+                    Puoi anche incollare direttamente da Excel/Sheets.
+                </p>
+                <textarea id="payout_data" rows="8"
+                    placeholder="mario.rossi@email.com,25.00&#10;anna.bianchi@gmail.com,30.50&#10;luca.verdi@outlook.it,15.00"></textarea>
+
+                <div id="preview-area" style="display:none;">
+                    <div id="summary-bar" class="summary-bar"></div>
+                    <div id="preview-table" class="preview-table"></div>
+                </div>
+
+                <div class="btn-group">
+                    <button type="button" id="preview-btn">Anteprima</button>
+                    <button type="submit" id="payout-btn" disabled>Invia Pagamenti</button>
+                    <button type="button" id="clear-btn" class="btn-secondary">Pulisci</button>
+                </div>
+            </form>
+        </article>
+
+        <!-- SEZIONE RISULTATI / STATO -->
+        <article id="results-section">
+            <header><h2>Risultati</h2></header>
+            <div id="batch-status-bar" style="display:none; margin-bottom:1rem;">
+                <div class="btn-group">
+                    <span id="batch-id-display"></span>
+                    <button type="button" id="check-status-btn" class="btn-secondary">Controlla Stato</button>
+                </div>
+            </div>
+            <pre id="results">I risultati appariranno qui dopo l'invio dei pagamenti...</pre>
+        </article>
+
+        <!-- SEZIONE RICERCA TRANSAZIONI -->
+        <details>
+            <summary><h2 style="display:inline">Cerca Transazioni</h2></summary>
             <form id="search-form">
                 <div class="grid">
                     <label>Data Inizio <input type="text" id="start_date" placeholder="2025-08-20T00:00:00Z" required></label>
@@ -26,86 +118,232 @@
                 </div>
                 <button id="search-btn" type="submit">Cerca</button>
             </form>
-        </article>
-
-        <article>
-            <header><h2>Invia Pagamenti Massivi (Payouts)</h2></header>
-            <form id="payout-form">
-                <label>Dati (email,importo per riga)</label>
-                <textarea id="payout_data" rows="5" placeholder="esempio@email.com,15.50&#10;altro@utente.it,20.00" required></textarea>
-                <button id="payout-btn" type="submit">Invia Pagamenti</button>
-            </form>
-        </article>
-
-        <section>
-            <h2>Risultati</h2>
-            <pre id="results">I risultati delle operazioni appariranno qui...</pre>
-        </section>
+        </details>
     </main>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const searchForm = document.getElementById('search-form');
-            const payoutForm = document.getElementById('payout-form');
-            const resultsArea = document.getElementById('results');
-            const searchBtn = document.getElementById('search-btn');
-            const payoutBtn = document.getElementById('payout-btn');
+    document.addEventListener('DOMContentLoaded', () => {
+        const payoutForm = document.getElementById('payout-form');
+        const searchForm = document.getElementById('search-form');
+        const payoutData = document.getElementById('payout_data');
+        const resultsArea = document.getElementById('results');
+        const previewArea = document.getElementById('preview-area');
+        const summaryBar = document.getElementById('summary-bar');
+        const previewTable = document.getElementById('preview-table');
+        const previewBtn = document.getElementById('preview-btn');
+        const payoutBtn = document.getElementById('payout-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const searchBtn = document.getElementById('search-btn');
+        const batchStatusBar = document.getElementById('batch-status-bar');
+        const batchIdDisplay = document.getElementById('batch-id-display');
+        const checkStatusBtn = document.getElementById('check-status-btn');
 
-            const setLoading = (button, isLoading) => {
-                button.disabled = isLoading;
-                button.setAttribute('aria-busy', isLoading);
-            };
+        const EMAIL_RE = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+        let lastBatchId = null;
+        let parsedItems = [];
 
-            searchForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                setLoading(searchBtn, true);
-                resultsArea.textContent = 'Ricerca in corso...';
-                
-                try {
-                    const response = await fetch('/api/search', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            start_date: document.getElementById('start_date').value,
-                            end_date: document.getElementById('end_date').value,
-                        })
-                    });
-                    const data = await response.json();
-                    resultsArea.textContent = JSON.stringify(data, null, 2);
-                } catch (error) {
-                    resultsArea.textContent = `Errore: ${error}`;
-                } finally {
-                    setLoading(searchBtn, false);
+        const setLoading = (button, isLoading) => {
+            button.disabled = isLoading;
+            button.setAttribute('aria-busy', isLoading);
+        };
+
+        // --- Parsing e validazione ---
+        function parseInput(text) {
+            const lines = text.trim().split('\n');
+            const items = [];
+            const errors = [];
+            const seenEmails = new Set();
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+
+                // Supporta separatori: virgola, tab, punto e virgola
+                const parts = line.split(/[,;\t]/);
+                if (parts.length < 2) {
+                    errors.push({ row: i + 1, msg: 'Formato non valido (serve email,importo)', line });
+                    continue;
                 }
-            });
 
-            payoutForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                if (!confirm('Sei sicuro di voler inviare questi pagamenti?')) return;
-                setLoading(payoutBtn, true);
-                resultsArea.textContent = 'Invio pagamenti in corso...';
+                const email = parts[0].trim().toLowerCase();
+                const valueStr = parts[1].trim().replace(',', '.');
 
-                try {
-                    const lines = document.getElementById('payout_data').value.trim().split('\n');
-                    const items = lines.map(line => {
-                        const [email, value] = line.split(',');
-                        return { email: email.trim(), value: value.trim() };
-                    });
-
-                    const response = await fetch('/api/payout', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(items)
-                    });
-                    const data = await response.json();
-                    resultsArea.textContent = JSON.stringify(data, null, 2);
-                } catch (error) {
-                    resultsArea.textContent = `Errore: ${error}`;
-                } finally {
-                    setLoading(payoutBtn, false);
+                if (!email) {
+                    errors.push({ row: i + 1, msg: 'Email mancante', line });
+                    continue;
                 }
-            });
+                if (!EMAIL_RE.test(email)) {
+                    errors.push({ row: i + 1, msg: `Email non valida: ${email}`, line });
+                    continue;
+                }
+
+                const value = parseFloat(valueStr);
+                if (isNaN(value) || value <= 0) {
+                    errors.push({ row: i + 1, msg: `Importo non valido: ${valueStr}`, line });
+                    continue;
+                }
+                if (value > 10000) {
+                    errors.push({ row: i + 1, msg: `Importo troppo alto: ${valueStr} (max 10.000)`, line });
+                    continue;
+                }
+
+                if (seenEmails.has(email)) {
+                    errors.push({ row: i + 1, msg: `Email duplicata: ${email}`, line });
+                    continue;
+                }
+
+                seenEmails.add(email);
+                items.push({ email, value: value.toFixed(2), row: i + 1 });
+            }
+
+            return { items, errors };
+        }
+
+        // --- Anteprima ---
+        function showPreview() {
+            const text = payoutData.value;
+            if (!text.trim()) {
+                previewArea.style.display = 'none';
+                payoutBtn.disabled = true;
+                return;
+            }
+
+            const { items, errors } = parseInput(text);
+            parsedItems = items;
+
+            const total = items.reduce((sum, item) => sum + parseFloat(item.value), 0);
+            const hasErrors = errors.length > 0;
+
+            summaryBar.className = 'summary-bar' + (hasErrors ? ' has-errors' : '');
+            summaryBar.innerHTML = `
+                <span>${items.length} destinatari</span>
+                <span>Totale: ${total.toFixed(2)} EUR</span>
+                ${hasErrors ? `<span style="color:#c62828">${errors.length} errori</span>` : ''}
+            `;
+
+            let html = '<table role="grid"><thead><tr><th>#</th><th>Email</th><th>Importo (EUR)</th></tr></thead><tbody>';
+            for (const item of items) {
+                html += `<tr><td>${item.row}</td><td>${escapeHtml(item.email)}</td><td>${item.value}</td></tr>`;
+            }
+            for (const err of errors) {
+                html += `<tr class="error-row"><td>${err.row}</td><td colspan="2">${escapeHtml(err.msg)}</td></tr>`;
+            }
+            html += '</tbody></table>';
+            previewTable.innerHTML = html;
+
+            previewArea.style.display = 'block';
+            payoutBtn.disabled = items.length === 0;
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // --- Event handlers ---
+        previewBtn.addEventListener('click', showPreview);
+
+        // Auto-preview quando si incolla
+        payoutData.addEventListener('paste', () => {
+            setTimeout(showPreview, 100);
         });
+
+        clearBtn.addEventListener('click', () => {
+            payoutData.value = '';
+            previewArea.style.display = 'none';
+            payoutBtn.disabled = true;
+            parsedItems = [];
+        });
+
+        payoutForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (parsedItems.length === 0) {
+                showPreview();
+                if (parsedItems.length === 0) return;
+            }
+
+            const total = parsedItems.reduce((sum, item) => sum + parseFloat(item.value), 0);
+            const msg = `Confermi l'invio di ${parsedItems.length} pagamenti per un totale di ${total.toFixed(2)} EUR?`;
+            if (!confirm(msg)) return;
+
+            setLoading(payoutBtn, true);
+            resultsArea.textContent = `Invio di ${parsedItems.length} pagamenti in corso...`;
+
+            try {
+                const items = parsedItems.map(({ email, value }) => ({ email, value }));
+                const response = await fetch('/api/payout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(items)
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    let errMsg = data.error || 'Errore sconosciuto';
+                    if (data.details) errMsg += '\n\n' + data.details.join('\n');
+                    resultsArea.textContent = errMsg;
+                    return;
+                }
+
+                resultsArea.textContent = JSON.stringify(data, null, 2);
+
+                // Mostra barra di stato batch
+                const batchId = data.batch_header?.payout_batch_id || data._batch_id;
+                if (batchId) {
+                    lastBatchId = batchId;
+                    batchIdDisplay.textContent = `Batch: ${batchId}`;
+                    batchStatusBar.style.display = 'block';
+                }
+            } catch (error) {
+                resultsArea.textContent = `Errore di rete: ${error}`;
+            } finally {
+                setLoading(payoutBtn, false);
+            }
+        });
+
+        // --- Controlla stato batch ---
+        checkStatusBtn.addEventListener('click', async () => {
+            if (!lastBatchId) return;
+            setLoading(checkStatusBtn, true);
+            resultsArea.textContent = 'Controllo stato in corso...';
+
+            try {
+                const response = await fetch(`/api/payout-status/${lastBatchId}`);
+                const data = await response.json();
+                resultsArea.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultsArea.textContent = `Errore: ${error}`;
+            } finally {
+                setLoading(checkStatusBtn, false);
+            }
+        });
+
+        // --- Ricerca transazioni ---
+        searchForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            setLoading(searchBtn, true);
+            resultsArea.textContent = 'Ricerca in corso...';
+
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        start_date: document.getElementById('start_date').value,
+                        end_date: document.getElementById('end_date').value,
+                    })
+                });
+                const data = await response.json();
+                resultsArea.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultsArea.textContent = `Errore: ${error}`;
+            } finally {
+                setLoading(searchBtn, false);
+            }
+        });
+    });
     </script>
 </body>
 </html>
