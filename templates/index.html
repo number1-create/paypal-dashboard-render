@@ -76,13 +76,16 @@
         <article id="payout-section">
             <header><h2>Invia Pagamenti Massivi</h2></header>
             <form id="payout-form">
-                <label>Incolla le email e gli importi (una per riga: email,importo)</label>
+                <label for="payout_amount">Importo per ogni destinatario (EUR)</label>
+                <input type="number" id="payout_amount" step="0.01" min="0.01" max="10000" placeholder="25.00" required>
+
+                <label for="payout_data">Incolla le email (una per riga)</label>
                 <p class="help-text">
-                    Formato: <code>email@esempio.com,15.50</code> &mdash; una per riga. Max 500 destinatari.
+                    Una email per riga. Max 500 destinatari.
                     Puoi anche incollare direttamente da Excel/Sheets.
                 </p>
                 <textarea id="payout_data" rows="8"
-                    placeholder="mario.rossi@email.com,25.00&#10;anna.bianchi@gmail.com,30.50&#10;luca.verdi@outlook.it,15.00"></textarea>
+                    placeholder="mario.rossi@email.com&#10;anna.bianchi@gmail.com&#10;luca.verdi@outlook.it"></textarea>
 
                 <div id="preview-area" style="display:none;">
                     <div id="summary-bar" class="summary-bar"></div>
@@ -165,6 +168,8 @@
             return response;
         }
 
+        const payoutAmount = document.getElementById('payout_amount');
+
         // --- Parsing e validazione ---
         function parseInput(text) {
             const lines = text.trim().split('\n');
@@ -172,18 +177,20 @@
             const errors = [];
             const seenEmails = new Set();
 
+            const value = parseFloat(payoutAmount.value);
+            if (isNaN(value) || value <= 0) {
+                return { items: [], errors: [{ row: 0, msg: 'Inserisci un importo valido' }] };
+            }
+            if (value > 10000) {
+                return { items: [], errors: [{ row: 0, msg: 'Importo troppo alto (max 10.000 EUR)' }] };
+            }
+            const valueStr = value.toFixed(2);
+
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i].trim();
                 if (!line) continue;
 
-                const parts = line.split(/[,;\t]/);
-                if (parts.length < 2) {
-                    errors.push({ row: i + 1, msg: 'Formato non valido (serve email,importo)', line });
-                    continue;
-                }
-
-                const email = parts[0].trim().toLowerCase();
-                const valueStr = parts[1].trim().replace(',', '.');
+                const email = line.split(/[,;\t]/)[0].trim().toLowerCase();
 
                 if (!email) {
                     errors.push({ row: i + 1, msg: 'Email mancante', line });
@@ -193,24 +200,13 @@
                     errors.push({ row: i + 1, msg: `Email non valida: ${email}`, line });
                     continue;
                 }
-
-                const value = parseFloat(valueStr);
-                if (isNaN(value) || value <= 0) {
-                    errors.push({ row: i + 1, msg: `Importo non valido: ${valueStr}`, line });
-                    continue;
-                }
-                if (value > 10000) {
-                    errors.push({ row: i + 1, msg: `Importo troppo alto: ${valueStr} (max 10.000)`, line });
-                    continue;
-                }
-
                 if (seenEmails.has(email)) {
                     errors.push({ row: i + 1, msg: `Email duplicata: ${email}`, line });
                     continue;
                 }
 
                 seenEmails.add(email);
-                items.push({ email, value: value.toFixed(2), row: i + 1 });
+                items.push({ email, value: valueStr, row: i + 1 });
             }
 
             return { items, errors };
@@ -267,6 +263,7 @@
 
         clearBtn.addEventListener('click', () => {
             payoutData.value = '';
+            payoutAmount.value = '';
             previewArea.style.display = 'none';
             payoutBtn.disabled = true;
             parsedItems = [];
